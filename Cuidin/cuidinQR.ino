@@ -68,7 +68,7 @@ struct SonidoMeta {
 // ----- BLE + pagina de ajustes (GitHub Pages, cliente Web Bluetooth) -----
 #define BLE_NOMBRE_DISPOSITIVO "Cuidin"
 // Cambia esto por tu URL real una vez publicada la pagina en GitHub Pages.
-#define URL_PAGINA_AJUSTES "https://TU_USUARIO.github.io/cuidin/"
+#define URL_PAGINA_AJUSTES "https://s7even-silva.github.io/cuidin/#/conexion"
 
 // 1 = modo debug: la pantalla muestra SOLO los datos (sin cara) y ademas
 //     se vuelca todo por el puerto Serial. Util para calibrar umbrales.
