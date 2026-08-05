@@ -22,6 +22,11 @@ const router = createRouter({
       name: 'sonidos',
       component: () => import('../views/SoundsView.vue'),
     },
+    {
+      path: '/estado',
+      name: 'estado',
+      component: () => import('../views/StatusView.vue'),
+    },
   ],
 })
 

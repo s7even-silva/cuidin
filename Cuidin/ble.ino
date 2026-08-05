@@ -5,7 +5,7 @@
 
 // ======================= BLE: SERVIDOR DE AJUSTES =======================
 // El ESP32 es el Peripheral BLE; la pagina web (Web Bluetooth API) es el
-// Central. Tres caracteristicas, todas en formato JSON como texto plano
+// Central. Cuatro caracteristicas, todas en formato JSON como texto plano
 // UTF-8 (protocolo completo documentado en docs/protocol.md del repo):
 //
 //   UUID_CARACT_LEER     (NOTIFY + READ): el ESP32 publica aqui el JSON con
@@ -16,13 +16,60 @@
 //   UUID_CARACT_SONIDOS  (NOTIFY + READ + WRITE): indice de la biblioteca de
 //                         sonidos RTTTL (lectura) y comandos subir/borrar/
 //                         probar (escritura). Ver sonidos.ino.
+//   UUID_CARACT_ESTADO   (NOTIFY + READ): datos en vivo de los sensores
+//                         (no ajustes) - se actualiza automaticamente cada
+//                         ~200ms mientras haya alguien conectado.
 #define UUID_SERVICIO            "6d5a1000-0001-4c1a-8b1a-2f6a9c8e1a01"
 #define UUID_CARACT_LEER         "6d5a1000-0002-4c1a-8b1a-2f6a9c8e1a01"
 #define UUID_CARACT_ESCRIBIR     "6d5a1000-0003-4c1a-8b1a-2f6a9c8e1a01"
 #define UUID_CARACT_SONIDOS      "6d5a1000-0004-4c1a-8b1a-2f6a9c8e1a01"
+#define UUID_CARACT_ESTADO       "6d5a1000-0005-4c1a-8b1a-2f6a9c8e1a01"
 
 BLECharacteristic *caractLeer;
 BLECharacteristic *caractSonidos;
+BLECharacteristic *caractEstado;
+
+// Datos en vivo (no ajustes) para mostrar en la pagina web: lo mismo que
+// ya se ve en la pantalla del dispositivo. postura viene como texto para
+// que la web no tenga que conocer el enum interno.
+String estadoAJSON() {
+  Lecturas d;
+  PosturaEstado p;
+  if (bloquearDatos()) {
+    d = datos;
+    p = posturaActual;
+    liberarDatos();
+  }
+
+  const char* textoPostura;
+  switch (p) {
+    case POSTURA_OK:          textoPostura = "ok";           break;
+    case POSTURA_MALA:        textoPostura = "mala";         break;
+    case POSTURA_SIN_PERSONA: textoPostura = "sin_persona";  break;
+    default:                  textoPostura = "desconocida";  break;
+  }
+
+  StaticJsonDocument<256> doc;
+  doc["distancia"] = d.distancia_cm;
+  doc["luz"]        = d.luz_adc;
+  doc["temperatura"] = d.temperatura;
+  doc["humedad"]     = d.humedad;
+  doc["sonido"]      = d.nivel_sonido;
+  doc["postura"]     = textoPostura;
+  doc["alarma"]      = d.alarma_activa;
+  doc["mensaje"]     = d.mensajeAlarma;
+
+  String salida;
+  serializeJson(doc, salida);
+  return salida;
+}
+
+void notificarEstadoActual() {
+  if (caractEstado == nullptr) return;
+  String json = estadoAJSON();
+  caractEstado->setValue((uint8_t*)json.c_str(), json.length());
+  caractEstado->notify();
+}
 
 String umbralesAJSON() {
   Umbrales u;
@@ -163,6 +210,12 @@ void iniciarBLE() {
   String sonidosInicial = sonidosAJSON();
   caractSonidos->setValue((uint8_t*)sonidosInicial.c_str(), sonidosInicial.length());
 
+  caractEstado = servicio->createCharacteristic(
+      UUID_CARACT_ESTADO, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+  caractEstado->addDescriptor(new BLE2902());
+  String estadoInicial = estadoAJSON();
+  caractEstado->setValue((uint8_t*)estadoInicial.c_str(), estadoInicial.length());
+
   servicio->start();
   BLEAdvertising *publicidad = BLEDevice::getAdvertising();
   publicidad->addServiceUUID(UUID_SERVICIO);
@@ -204,4 +257,3 @@ void mostrarQRAjustes() {
 
   delay(5000); // tiempo para escanear antes de pasar a la vista normal
 }
-

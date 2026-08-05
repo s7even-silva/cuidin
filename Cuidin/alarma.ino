@@ -35,13 +35,15 @@ void taskAlarma(void *parametro) {
     // por defecto el struct (razonable, y evita bloquear esta tarea).
 
     // Interruptor general: si la alarma esta desactivada desde la web, no
-    // se evalua nada y el sonido nunca suena.
+    // se evalua nada y el sonido nunca suena (pero los datos en vivo por
+    // BLE siguen actualizandose igual).
     if (!u.alarma_habilitada) {
       if (bloquearDatos()) {
         datos.alarma_activa = false;
         datos.mensajeAlarma[0] = '\0';
         liberarDatos();
       }
+      notificarEstadoActual();
       vTaskDelay(pdMS_TO_TICKS(200));
       continue;
     }
@@ -89,7 +91,8 @@ void taskAlarma(void *parametro) {
       reproducirAlarmaSonora(u.patron_sonido, u.volumen, rtttl);
     }
 
+    notificarEstadoActual(); // datos en vivo por BLE (caracteristica 0005)
+
     vTaskDelay(pdMS_TO_TICKS(200));
   }
 }
-

@@ -7,6 +7,7 @@ export const UUID_SERVICIO = '6d5a1000-0001-4c1a-8b1a-2f6a9c8e1a01'
 export const UUID_CARACT_LEER = '6d5a1000-0002-4c1a-8b1a-2f6a9c8e1a01'
 export const UUID_CARACT_ESCRIBIR = '6d5a1000-0003-4c1a-8b1a-2f6a9c8e1a01'
 export const UUID_CARACT_SONIDOS = '6d5a1000-0004-4c1a-8b1a-2f6a9c8e1a01'
+export const UUID_CARACT_ESTADO = '6d5a1000-0005-4c1a-8b1a-2f6a9c8e1a01'
 
 export interface Umbrales {
   dist: number
@@ -57,6 +58,19 @@ export const MOSTRAR_BITS = [
   { bit: MOSTRAR_SONIDO, etiqueta: 'Nivel de sonido' },
   { bit: MOSTRAR_POSTURA, etiqueta: 'Postura' },
 ] as const
+
+export type Postura = 'ok' | 'mala' | 'sin_persona' | 'desconocida'
+
+export interface Estado {
+  distancia: number
+  luz: number
+  temperatura: number | null
+  humedad: number | null
+  sonido: number
+  postura: Postura
+  alarma: boolean
+  mensaje: string
+}
 
 export interface SonidoMeta {
   id: string

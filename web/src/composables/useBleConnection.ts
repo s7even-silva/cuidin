@@ -4,6 +4,7 @@ import {
   UUID_CARACT_LEER,
   UUID_CARACT_ESCRIBIR,
   UUID_CARACT_SONIDOS,
+  UUID_CARACT_ESTADO,
 } from '../lib/bleProtocol'
 
 export type EstadoConexion = 'inactivo' | 'conectando' | 'conectado' | 'desconectado' | 'error'
@@ -16,10 +17,12 @@ const dispositivo = shallowRef<BluetoothDevice | null>(null)
 const caractLeer = shallowRef<BluetoothRemoteGATTCharacteristic | null>(null)
 const caractEscribir = shallowRef<BluetoothRemoteGATTCharacteristic | null>(null)
 const caractSonidos = shallowRef<BluetoothRemoteGATTCharacteristic | null>(null)
+const caractEstado = shallowRef<BluetoothRemoteGATTCharacteristic | null>(null)
 
 type ListenerJSON = (json: unknown) => void
 const listenersLeer = new Set<ListenerJSON>()
 const listenersSonidos = new Set<ListenerJSON>()
+const listenersEstado = new Set<ListenerJSON>()
 
 const decodificador = new TextDecoder('utf-8')
 const codificador = new TextEncoder()
@@ -45,6 +48,7 @@ function alDesconectar() {
   caractLeer.value = null
   caractEscribir.value = null
   caractSonidos.value = null
+  caractEstado.value = null
 }
 
 async function conectar() {
@@ -83,6 +87,7 @@ async function conectarGatt(device: BluetoothDevice) {
   caractLeer.value = await servicio.getCharacteristic(UUID_CARACT_LEER)
   caractEscribir.value = await servicio.getCharacteristic(UUID_CARACT_ESCRIBIR)
   caractSonidos.value = await servicio.getCharacteristic(UUID_CARACT_SONIDOS)
+  caractEstado.value = await servicio.getCharacteristic(UUID_CARACT_ESTADO)
 
   caractLeer.value.addEventListener('characteristicvaluechanged', (e) =>
     parsearEventoJSON(e, listenersLeer),
@@ -94,13 +99,21 @@ async function conectarGatt(device: BluetoothDevice) {
   )
   await caractSonidos.value.startNotifications()
 
-  // Lectura inicial de ambas características (no hay que esperar a la
+  caractEstado.value.addEventListener('characteristicvaluechanged', (e) =>
+    parsearEventoJSON(e, listenersEstado),
+  )
+  await caractEstado.value.startNotifications()
+
+  // Lectura inicial de las tres características (no hay que esperar a la
   // primera notificación para tener el estado actual).
   const valorLeer = await caractLeer.value.readValue()
   parsearValorJSON(valorLeer, listenersLeer)
 
   const valorSonidos = await caractSonidos.value.readValue()
   parsearValorJSON(valorSonidos, listenersSonidos)
+
+  const valorEstado = await caractEstado.value.readValue()
+  parsearValorJSON(valorEstado, listenersEstado)
 
   estado.value = 'conectado'
   ultimoError.value = null
@@ -142,6 +155,11 @@ function suscribirseASonidos(fn: ListenerJSON) {
   return () => listenersSonidos.delete(fn)
 }
 
+function suscribirseAEstado(fn: ListenerJSON) {
+  listenersEstado.add(fn)
+  return () => listenersEstado.delete(fn)
+}
+
 /**
  * Composable singleton: el estado de conexión BLE es compartido por toda la
  * app (una sola conexión activa a la vez), así que el estado vive a nivel de
@@ -159,5 +177,6 @@ export function useBleConnection() {
     escribirComandoSonidos,
     suscribirseAUmbrales,
     suscribirseASonidos,
+    suscribirseAEstado,
   }
 }

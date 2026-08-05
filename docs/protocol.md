@@ -19,10 +19,11 @@ Nombre de anuncio BLE: `Cuidin` (`BLE_NOMBRE_DISPOSITIVO`).
 | `CARACT_LEER` | `6d5a1000-0002-4c1a-8b1a-2f6a9c8e1a01` | READ, NOTIFY | JSON completo de `Umbrales` (estado actual). Se notifica cada vez que cambia, incluida la confirmación tras una escritura. |
 | `CARACT_ESCRIBIR` | `6d5a1000-0003-4c1a-8b1a-2f6a9c8e1a01` | WRITE | JSON parcial: solo los campos de `Umbrales` que se quieren cambiar. Tras aplicar, el firmware persiste en NVS y notifica el estado final por `CARACT_LEER`. |
 | `CARACT_SONIDOS` | `6d5a1000-0004-4c1a-8b1a-2f6a9c8e1a01` | READ, NOTIFY, WRITE | Índice de la biblioteca de sonidos RTTTL (lectura/notificación) y comandos de gestión (escritura). Ver [§3](#3-caract_sonidos). |
+| `CARACT_ESTADO` | `6d5a1000-0005-4c1a-8b1a-2f6a9c8e1a01` | READ, NOTIFY | Datos en vivo de los sensores (no ajustes), notificados automáticamente cada ~200ms mientras haya alguien conectado. Ver [§4](#4-caract_estado). |
 
 ## 1. `CARACT_LEER` — estado completo
 
-Publicado por `umbralesAJSON()` en `ble.ino`, tamaño actual `StaticJsonDocument<384>` (subir a `<512>` al añadir los campos nuevos).
+Publicado por `umbralesAJSON()` en `ble.ino`, `StaticJsonDocument<512>`.
 
 ```json
 {
@@ -134,6 +135,34 @@ Si `id` coincide con el `sonidoRtttlId` activo en `Umbrales`, este se limpia a `
 
 Tras cualquier `subir`/`borrar`, el firmware renotifica el índice completo por `CARACT_SONIDOS` (mismo patrón de "confirmar con el estado final" que ya usa `CARACT_LEER`).
 
+## 4. `CARACT_ESTADO` — datos en vivo de sensores
+
+Publicado por `estadoAJSON()` en `ble.ino`, `StaticJsonDocument<256>`. A diferencia de `CARACT_LEER` (ajustes/configuración), esta característica expone **lecturas**, no configuración — es solo lectura desde la web (no tiene característica de escritura asociada). Se renotifica automáticamente cada ~200ms desde `taskAlarma` (`alarma.ino`), independientemente de si la alarma está habilitada o no.
+
+```json
+{
+  "distancia": 118.2,
+  "luz": 812,
+  "temperatura": 24.3,
+  "humedad": 55.1,
+  "sonido": 1450,
+  "postura": "ok",
+  "alarma": false,
+  "mensaje": ""
+}
+```
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `distancia` | float | Distancia (cm) medida por el HC-SR04. `-1` si no hay lectura válida. |
+| `luz` | int | Lectura ADC cruda del LDR (0-4095). |
+| `temperatura` | float | Temperatura (°C) del DHT11. `NaN` (se serializa como `null`) si no hay lectura válida aún. |
+| `humedad` | float | Humedad (%) del DHT11. `NaN` (→ `null`) si no hay lectura válida aún. |
+| `sonido` | int | Nivel de sonido ambiente (RMS crudo del INMP441). |
+| `postura` | string | Una de `"ok"`, `"mala"`, `"sin_persona"`, `"desconocida"` (traducción de `PosturaEstado`, para que la web no necesite conocer el enum interno). |
+| `alarma` | bool | Si la alarma está sonando/activa en este momento. |
+| `mensaje` | string | Texto descriptivo de los problemas activos (ej. `"Poca luz + Corrige tu postura"`), vacío si no hay alarma. |
+
 ## Formato RTTTL soportado
 
 Formato estándar Nokia RTTTL: `nombre:d=<duración>,o=<octava>,b=<bpm>:<notas separadas por coma>`. El parser de firmware (`Cuidin/rtttl.ino`) traduce cada nota a un par (frecuencia Hz, duración ms) y los reproduce en secuencia con la función ya existente `reproducirTono(frecuenciaHz, duracionMs, volumen)` (`audio.ino`). El parser en el frontend (`web/src/lib/rtttl.ts`) es una reimplementación en TypeScript del mismo formato, usada tanto para validar antes de enviar como para el preview de audio en el navegador (Web Audio API).
@@ -147,5 +176,5 @@ Todo vía `Preferences` (NVS), mismo mecanismo ya usado hoy:
 
 ## Notas de compatibilidad
 
-- Todos los campos nuevos (`sonidoRtttlId`, `modoCamara`, la característica `CARACT_SONIDOS` completa) son aditivos: un frontend viejo que no los conozca sigue funcionando contra el resto del protocolo sin romperse, porque `CARACT_ESCRIBIR` ignora silenciosamente las claves que no reconoce y el firmware sigue publicando el resto de campos igual.
+- Todos los campos y características nuevos (`sonidoRtttlId`, `modoCamara`, `CARACT_SONIDOS`, `CARACT_ESTADO`) son aditivos: un frontend viejo que no los conozca sigue funcionando contra el resto del protocolo sin romperse, porque `CARACT_ESCRIBIR` ignora silenciosamente las claves que no reconoce y el firmware sigue publicando el resto de campos/características igual.
 - No hay autenticación ni cifrado a nivel de aplicación (decisión consciente, ver plan de implementación). El firmware valida rangos y límites de todo dato recibido antes de persistir, para no corromper su propio estado, aunque no autentique quién lo envía.

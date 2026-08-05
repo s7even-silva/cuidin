@@ -8,6 +8,7 @@
       <RouterLink to="/conexion">Conexión</RouterLink>
       <RouterLink to="/umbrales">Umbrales</RouterLink>
       <RouterLink to="/sonidos">Sonidos</RouterLink>
+      <RouterLink to="/estado">Estado</RouterLink>
     </nav>
   </header>
   <main>
