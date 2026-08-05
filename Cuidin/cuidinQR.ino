@@ -22,6 +22,14 @@
 // does not name a type").
 enum PosturaEstado { POSTURA_OK, POSTURA_MALA, POSTURA_SIN_PERSONA, POSTURA_DESCONOCIDA };
 
+// Mismo motivo que PosturaEstado arriba: listarSonidos() (sonidos.ino)
+// devuelve/recibe este tipo, asi que debe existir antes de los prototipos
+// autogenerados.
+struct SonidoMeta {
+  String id;
+  String nombre;
+};
+
 #include <Wire.h>
 #include <SPI.h>
 #include <Adafruit_GFX.h>
@@ -152,6 +160,10 @@ struct Umbrales {
   uint8_t prioritarios      = PRIO_LUZ | PRIO_POSTURA;  // igual que antes por defecto
   uint8_t mostrar_datos     = MOSTRAR_TODO;             // filas visibles en pantalla
   uint8_t patron_sonido     = 0;                        // indice 0..NUM_PATRONES_SONIDO-1
+  String  sonido_rtttl_id   = "";                       // id de sonidos.ino; si no esta
+                                                          // vacio, tiene prioridad sobre
+                                                          // patron_sonido al sonar la alarma
+  bool    modo_camara       = false;                    // vista de camara en vivo en el TFT
 };
 
 Umbrales umbrales;
@@ -180,6 +192,8 @@ void cargarUmbrales() {
   umbrales.prioritarios      = prefs.getUChar("prio",    umbrales.prioritarios);
   umbrales.mostrar_datos     = prefs.getUChar("mostrar", umbrales.mostrar_datos);
   umbrales.patron_sonido     = prefs.getUChar("patron",  umbrales.patron_sonido);
+  umbrales.sonido_rtttl_id   = prefs.getString("rtttlId", umbrales.sonido_rtttl_id);
+  umbrales.modo_camara       = prefs.getBool("modoCam",  umbrales.modo_camara);
   prefs.end();
 }
 
@@ -198,6 +212,8 @@ void guardarUmbrales() {
   prefs.putUChar("prio",    umbrales.prioritarios);
   prefs.putUChar("mostrar", umbrales.mostrar_datos);
   prefs.putUChar("patron",  umbrales.patron_sonido);
+  prefs.putString("rtttlId", umbrales.sonido_rtttl_id);
+  prefs.putBool("modoCam",  umbrales.modo_camara);
   prefs.end();
 }
 

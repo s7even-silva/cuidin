@@ -73,4 +73,4 @@ export type ComandoSonidos =
   | { accion: 'probar'; id: string }
 
 export const LIMITE_SONIDOS = 8
-export const LIMITE_CARACTERES_RTTTL = 200
+// LIMITE_CARACTERES_RTTTL vive en lib/rtttl.ts, junto al parser que lo usa.

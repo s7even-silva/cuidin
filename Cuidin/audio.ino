@@ -104,11 +104,18 @@ void reproducirPatronGenerado(uint8_t patron, float volumen) {
   }
 }
 
-// Punto unico desde el que taskAlarma dispara el sonido: primero intenta el
-// archivo correspondiente en la SD; si no existe o la SD no esta disponible,
-// cae al patron generado con el mismo indice.
-void reproducirAlarmaSonora(uint8_t patron, int volumenPorcentaje) {
+// Punto unico desde el que taskAlarma dispara el sonido. Si se pasa un RTTTL
+// no vacio (biblioteca de sonidos.ino), tiene prioridad sobre todo lo demas.
+// Si no, primero intenta el archivo correspondiente en la SD; si no existe o
+// la SD no esta disponible, cae al patron generado con el mismo indice.
+void reproducirAlarmaSonora(uint8_t patron, int volumenPorcentaje, const String &rtttl) {
   float volumen = constrain(volumenPorcentaje, 0, 100) / 100.0f;
+
+  if (rtttl.length() > 0) {
+    reproducirRTTTL(rtttl, volumen);
+    i2s_zero_dma_buffer(I2S_PORT);
+    return;
+  }
 
   if (sdDisponible) {
     char ruta[24];

@@ -4,28 +4,31 @@
 // ============================================================
 
 // ======================= BLE: SERVIDOR DE AJUSTES =======================
-// El ESP32 es el Peripheral BLE; la pagina web (Web Bluetooth API, hecha
-// por tu compañero) es el Central. Dos caracteristicas, ambas en formato
-// JSON como texto plano UTF-8:
+// El ESP32 es el Peripheral BLE; la pagina web (Web Bluetooth API) es el
+// Central. Tres caracteristicas, todas en formato JSON como texto plano
+// UTF-8 (protocolo completo documentado en docs/protocol.md del repo):
 //
-//   UUID_CARACT_LEER  (NOTIFY + READ): el ESP32 publica aqui el JSON con
-//                      TODOS los ajustes actuales, cada vez que cambian.
+//   UUID_CARACT_LEER     (NOTIFY + READ): el ESP32 publica aqui el JSON con
+//                         TODOS los ajustes actuales, cada vez que cambian.
 //   UUID_CARACT_ESCRIBIR (WRITE): la pagina web escribe aqui un JSON con
-//                      los campos que quiere cambiar (no hace falta mandar
-//                      todos los campos, solo los que se estan editando).
-//
-// Ver el mensaje aparte con el detalle completo del JSON para tu compañero.
+//                         los campos que quiere cambiar (no hace falta mandar
+//                         todos los campos, solo los que se estan editando).
+//   UUID_CARACT_SONIDOS  (NOTIFY + READ + WRITE): indice de la biblioteca de
+//                         sonidos RTTTL (lectura) y comandos subir/borrar/
+//                         probar (escritura). Ver sonidos.ino.
 #define UUID_SERVICIO            "6d5a1000-0001-4c1a-8b1a-2f6a9c8e1a01"
 #define UUID_CARACT_LEER         "6d5a1000-0002-4c1a-8b1a-2f6a9c8e1a01"
 #define UUID_CARACT_ESCRIBIR     "6d5a1000-0003-4c1a-8b1a-2f6a9c8e1a01"
+#define UUID_CARACT_SONIDOS      "6d5a1000-0004-4c1a-8b1a-2f6a9c8e1a01"
 
 BLECharacteristic *caractLeer;
+BLECharacteristic *caractSonidos;
 
 String umbralesAJSON() {
   Umbrales u;
   if (bloquearUmbrales()) { u = umbrales; liberarUmbrales(); }
 
-  StaticJsonDocument<384> doc;
+  StaticJsonDocument<512> doc;
   doc["dist"]    = u.dist_presencia_cm;
   doc["tmin"]    = u.temp_min;
   doc["tmax"]    = u.temp_max;
@@ -39,6 +42,8 @@ String umbralesAJSON() {
   doc["prio"]    = u.prioritarios;
   doc["mostrar"] = u.mostrar_datos;
   doc["patron"]  = u.patron_sonido;
+  doc["sonidoRtttlId"] = u.sonido_rtttl_id;
+  doc["modoCamara"]    = u.modo_camara;
 
   String salida;
   serializeJson(doc, salida);
@@ -57,7 +62,7 @@ class CallbackEscritura : public BLECharacteristicCallbacks {
     String valor = caract->getValue();
     if (valor.length() == 0) return;
 
-    StaticJsonDocument<384> doc;
+    StaticJsonDocument<512> doc;
     DeserializationError err = deserializeJson(doc, valor);
     if (err) {
       Serial.println("JSON invalido recibido por BLE, se ignora.");
@@ -78,11 +83,60 @@ class CallbackEscritura : public BLECharacteristicCallbacks {
       if (doc.containsKey("prio"))    umbrales.prioritarios      = doc["prio"];
       if (doc.containsKey("mostrar")) umbrales.mostrar_datos     = doc["mostrar"];
       if (doc.containsKey("patron"))  umbrales.patron_sonido     = doc["patron"];
+      if (doc.containsKey("sonidoRtttlId")) umbrales.sonido_rtttl_id = doc["sonidoRtttlId"].as<String>();
+      if (doc.containsKey("modoCamara"))    umbrales.modo_camara     = doc["modoCamara"];
       liberarUmbrales();
     }
     guardarUmbrales();
     notificarAjustesActuales(); // confirma a la web el estado final guardado
     Serial.println("Ajustes actualizados por BLE.");
+  }
+};
+
+// ======================= CARACT_SONIDOS: biblioteca RTTTL =======================
+void notificarSonidos() {
+  if (caractSonidos == nullptr) return;
+  String json = sonidosAJSON();
+  caractSonidos->setValue((uint8_t*)json.c_str(), json.length());
+  caractSonidos->notify();
+}
+
+class CallbackSonidos : public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic *caract) override {
+    String valor = caract->getValue();
+    if (valor.length() == 0) return;
+
+    StaticJsonDocument<512> doc;
+    DeserializationError err = deserializeJson(doc, valor);
+    if (err) {
+      Serial.println("JSON invalido recibido en CARACT_SONIDOS, se ignora.");
+      return;
+    }
+
+    String accion = doc["accion"] | "";
+
+    if (accion == "subir") {
+      String nombre = doc["nombre"] | "";
+      String rtttl  = doc["rtttl"]  | "";
+      subirSonido(nombre, rtttl);
+      notificarSonidos();
+    } else if (accion == "borrar") {
+      String id = doc["id"] | "";
+      if (borrarSonido(id)) {
+        notificarSonidos();
+        notificarAjustesActuales(); // por si el borrado limpio sonido_rtttl_id activo
+      }
+    } else if (accion == "probar") {
+      String id = doc["id"] | "";
+      String rtttl = buscarRTTTLPorId(id);
+      if (rtttl.length() > 0) {
+        int volumenActual = 80;
+        if (bloquearUmbrales()) { volumenActual = umbrales.volumen; liberarUmbrales(); }
+        reproducirRTTTL(rtttl, constrain(volumenActual, 0, 100) / 100.0f);
+      }
+    } else {
+      Serial.println("Accion desconocida en CARACT_SONIDOS, se ignora.");
+    }
   }
 };
 
@@ -100,6 +154,14 @@ void iniciarBLE() {
   BLECharacteristic *caractEscribir = servicio->createCharacteristic(
       UUID_CARACT_ESCRIBIR, BLECharacteristic::PROPERTY_WRITE);
   caractEscribir->setCallbacks(new CallbackEscritura());
+
+  caractSonidos = servicio->createCharacteristic(
+      UUID_CARACT_SONIDOS,
+      BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY | BLECharacteristic::PROPERTY_WRITE);
+  caractSonidos->addDescriptor(new BLE2902());
+  caractSonidos->setCallbacks(new CallbackSonidos());
+  String sonidosInicial = sonidosAJSON();
+  caractSonidos->setValue((uint8_t*)sonidosInicial.c_str(), sonidosInicial.length());
 
   servicio->start();
   BLEAdvertising *publicidad = BLEDevice::getAdvertising();
