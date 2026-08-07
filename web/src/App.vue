@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import cuidinMark from './assets/cuidin-mark.png'
+import NavIcon from './components/NavIcon.vue'
 import { useBleStore } from './stores/ble'
 import { useUmbralesStore } from './stores/umbrales'
 import { useSonidosStore } from './stores/sonidos'
@@ -27,10 +28,10 @@ const puntoColor: Record<string, string> = {
 }
 
 const secciones = [
-  { to: '/conexion', etiqueta: 'Conexión' },
-  { to: '/umbrales', etiqueta: 'Umbrales' },
-  { to: '/sonidos', etiqueta: 'Sonidos' },
-  { to: '/estado', etiqueta: 'Estado' },
+  { to: '/conexion', etiqueta: 'Conexión', icono: 'conexion' as const },
+  { to: '/umbrales', etiqueta: 'Umbrales', icono: 'umbrales' as const },
+  { to: '/sonidos', etiqueta: 'Sonidos', icono: 'sonidos' as const },
+  { to: '/estado', etiqueta: 'Estado', icono: 'estado' as const },
 ]
 </script>
 
@@ -38,11 +39,14 @@ const secciones = [
   <header class="cabecera">
     <div class="marca">
       <img :src="cuidinMark" alt="" class="logo" width="40" height="40" />
-      <span class="nombre">Cuidín</span>
+      <span class="nombre">Cuid<span class="acento">í</span>n</span>
     </div>
 
     <nav class="nav nav-superior">
-      <RouterLink v-for="s in secciones" :key="s.to" :to="s.to">{{ s.etiqueta }}</RouterLink>
+      <RouterLink v-for="s in secciones" :key="s.to" :to="s.to">
+        <NavIcon :seccion="s.icono" />
+        <span>{{ s.etiqueta }}</span>
+      </RouterLink>
     </nav>
 
     <span
@@ -74,24 +78,7 @@ const secciones = [
 
   <nav class="nav nav-inferior" aria-label="Navegación principal">
     <RouterLink v-for="s in secciones" :key="s.to" :to="s.to" class="nav-inferior-item">
-      <span class="nav-inferior-icono" aria-hidden="true">
-        <svg v-if="s.to === '/conexion'" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M6.5 6.5 17.5 17.5M12 2v7.5l3-3M12 22v-7.5l-3 3M6.5 17.5 17.5 6.5" />
-        </svg>
-        <svg v-else-if="s.to === '/umbrales'" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M4 6h10M4 12h16M4 18h7" />
-          <circle cx="17" cy="6" r="2" />
-          <circle cx="9" cy="18" r="2" />
-        </svg>
-        <svg v-else-if="s.to === '/sonidos'" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M9 18V6l10-2v12" />
-          <circle cx="6.5" cy="18" r="2.5" />
-          <circle cx="16.5" cy="16" r="2.5" />
-        </svg>
-        <svg v-else viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M3 12h4l2-7 4 14 2-7h6" />
-        </svg>
-      </span>
+      <NavIcon :seccion="s.icono" />
       <span class="nav-inferior-texto">{{ s.etiqueta }}</span>
     </RouterLink>
   </nav>
@@ -128,6 +115,9 @@ const secciones = [
   font-size: 1.15rem;
   color: var(--primary);
 }
+.nombre .acento {
+  color: var(--primary-strong);
+}
 
 .nav {
   display: flex;
@@ -140,6 +130,9 @@ const secciones = [
 }
 
 .nav-superior a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
   color: var(--text-muted);
   text-decoration: none;
   font-weight: 600;
@@ -258,9 +251,6 @@ main {
   }
   .nav-inferior-item.router-link-active {
     color: var(--accent);
-  }
-  .nav-inferior-icono {
-    display: flex;
   }
   .nav-inferior-texto {
     font-size: 0.68rem;
