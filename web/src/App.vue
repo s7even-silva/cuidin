@@ -39,7 +39,7 @@ const secciones = [
   <header class="cabecera">
     <div class="marca">
       <img :src="cuidinMark" alt="" class="logo" width="40" height="40" />
-      <span class="nombre">Cuid<span class="acento">í</span>n</span>
+      <span class="nombre">Cuidín</span>
     </div>
 
     <nav class="nav nav-superior">
@@ -114,9 +114,6 @@ const secciones = [
   font-weight: 700;
   font-size: 1.15rem;
   color: var(--primary);
-}
-.nombre .acento {
-  color: var(--primary-strong);
 }
 
 .nav {
