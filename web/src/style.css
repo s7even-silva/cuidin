@@ -48,7 +48,7 @@
   --font-heading: 'Baloo 2', var(--font-body);
 
   font: 16px/1.55 var(--font-body);
-  color-scheme: light dark;
+  color-scheme: light;
   color: var(--text);
   background: var(--bg);
   font-synthesis: none;
@@ -57,32 +57,14 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #211a12;
-    --bg-card: #2b2118;
-    --bg-card-muted: #33271b;
-    --text: #f3e9d8;
-    --text-muted: #c9b79c;
-    --border: #4a3b28;
-    --color-terracota-soft: #4a3b28;
-    --color-sage-soft: #26382f;
-    --primary: #d79a5c;
-    --primary-strong: #e0ac78;
-    --accent: #7fada0;
-    --accent-strong: #8fbbae;
-    --accent-on: #17231e;
-    --focus-ring: #8fbbae;
-    --color-danger: #e07a6b;
-    --color-danger-bg: #3a231f;
-    --color-warning: #d7ab6c;
-    --color-warning-bg: #3a2f1c;
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
-    --shadow-md: 0 8px 20px rgba(0, 0, 0, 0.4);
-  }
-}
-
-:root[data-theme='dark'] {
+/*
+  El tema por defecto es SIEMPRE claro (identidad de marca), sin seguir
+  prefers-color-scheme del sistema. useTheme.ts fija data-theme="claro" en
+  el arranque y lo persiste; el usuario cambia a oscuro con el botón del
+  header, nunca automáticamente.
+*/
+:root[data-theme='oscuro'] {
+  color-scheme: dark;
   --bg: #211a12;
   --bg-card: #2b2118;
   --bg-card-muted: #33271b;
@@ -101,21 +83,8 @@
   --color-danger-bg: #3a231f;
   --color-warning: #d7ab6c;
   --color-warning-bg: #3a2f1c;
-}
-
-:root[data-theme='light'] {
-  --bg: var(--color-cream);
-  --bg-card: #ffffff;
-  --bg-card-muted: var(--color-cream-card);
-  --text: var(--color-ink);
-  --text-muted: #6b5a45;
-  --border: #e7dcc8;
-  --primary: var(--color-terracota-ink);
-  --primary-strong: var(--color-terracota);
-  --accent: var(--color-sage-ink);
-  --accent-strong: var(--color-sage);
-  --accent-on: #ffffff;
-  --focus-ring: var(--color-sage);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 8px 20px rgba(0, 0, 0, 0.4);
 }
 
 * {
