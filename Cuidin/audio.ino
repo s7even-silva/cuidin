@@ -15,6 +15,7 @@
 bool sdDisponible = false;
 
 void iniciarSD() {
+  SD_MMC.setPins(39, 38, 40); // CLK, CMD, D0
   if (!SD_MMC.begin("/sdcard", true)) { // true = modo de 1 bit
     Serial.println("SD no detectada. Se usaran los patrones de sonido generados.");
     sdDisponible = false;
