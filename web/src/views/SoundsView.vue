@@ -51,12 +51,13 @@ const idActivo = computed(() => umbrales.actuales?.sonidoRtttlId ?? '')
 <template>
   <section>
     <h1>Sonidos (RTTTL)</h1>
-    <p v-if="ble.estado !== 'conectado'" class="aviso">
+
+    <div v-if="ble.estado !== 'conectado'" class="aviso aviso-info">
       Conéctate a Cuidín primero para gestionar la biblioteca de sonidos.
-    </p>
+    </div>
 
     <template v-else>
-      <p>
+      <p class="intro">
         Melodías personalizadas que suenan cuando se dispara la alarma, en vez del patrón
         generado. Máximo {{ LIMITE_SONIDOS }} melodías, {{ LIMITE_CARACTERES_RTTTL }} caracteres
         cada una.
@@ -64,12 +65,12 @@ const idActivo = computed(() => umbrales.actuales?.sonidoRtttlId ?? '')
 
       <fieldset>
         <legend>Nueva melodía</legend>
-        <label>
-          Nombre
+        <label class="campo">
+          <span>Nombre</span>
           <input type="text" v-model="form.nombre" maxlength="40" placeholder="Ej: Urgente" />
         </label>
-        <label>
-          RTTTL
+        <label class="campo">
+          <span>RTTTL</span>
           <textarea
             v-model="form.rtttl"
             rows="3"
@@ -84,10 +85,20 @@ const idActivo = computed(() => umbrales.actuales?.sonidoRtttlId ?? '')
           Ya tienes {{ LIMITE_SONIDOS }} melodías guardadas. Borra alguna antes de subir otra.
         </p>
         <div class="acciones">
-          <button type="button" :disabled="!rtttlEsValido(form.rtttl)" @click="previsualizar(form.rtttl)">
+          <button
+            type="button"
+            class="btn btn-secondary"
+            :disabled="!rtttlEsValido(form.rtttl)"
+            @click="previsualizar(form.rtttl)"
+          >
             {{ preview.reproduciendo ? 'Reproduciendo…' : 'Escuchar en el navegador' }}
           </button>
-          <button type="button" :disabled="!formValido || limiteAlcanzado || sonidos.procesando" @click="subir">
+          <button
+            type="button"
+            class="btn btn-primary"
+            :disabled="!formValido || limiteAlcanzado || sonidos.procesando"
+            @click="subir"
+          >
             {{ sonidos.procesando ? 'Guardando…' : 'Guardar en Cuidín' }}
           </button>
         </div>
@@ -95,18 +106,29 @@ const idActivo = computed(() => umbrales.actuales?.sonidoRtttlId ?? '')
 
       <fieldset>
         <legend>Biblioteca ({{ sonidos.lista.length }}/{{ LIMITE_SONIDOS }})</legend>
-        <p v-if="sonidos.lista.length === 0">Todavía no hay melodías guardadas.</p>
+        <p v-if="sonidos.lista.length === 0" class="vacio">Todavía no hay melodías guardadas.</p>
         <ul v-else class="lista">
-          <li v-for="s in sonidos.lista" :key="s.id" :class="{ activo: s.id === idActivo }">
-            <span class="nombre">{{ s.nombre }}</span>
-            <span v-if="s.id === idActivo" class="etiqueta">En uso para la alarma</span>
+          <li v-for="s in sonidos.lista" :key="s.id" class="tarjeta" :class="{ activo: s.id === idActivo }">
+            <div class="tarjeta-cabecera">
+              <span class="nombre">{{ s.nombre }}</span>
+              <span v-if="s.id === idActivo" class="etiqueta">En uso</span>
+            </div>
             <div class="acciones">
-              <button type="button" @click="probarEnCuidin(s.id)">Probar en Cuidín</button>
-              <button v-if="s.id !== idActivo" type="button" @click="usarComoAlarma(s.id)">
+              <button type="button" class="btn btn-secondary" @click="probarEnCuidin(s.id)">
+                Probar en Cuidín
+              </button>
+              <button
+                v-if="s.id !== idActivo"
+                type="button"
+                class="btn btn-secondary"
+                @click="usarComoAlarma(s.id)"
+              >
                 Usar en la alarma
               </button>
-              <button v-else type="button" @click="dejarDeUsar">Dejar de usar</button>
-              <button type="button" class="borrar" @click="borrar(s.id)">Borrar</button>
+              <button v-else type="button" class="btn btn-secondary" @click="dejarDeUsar">
+                Dejar de usar
+              </button>
+              <button type="button" class="btn btn-danger" @click="borrar(s.id)">Borrar</button>
             </div>
           </li>
         </ul>
@@ -116,52 +138,75 @@ const idActivo = computed(() => umbrales.actuales?.sonidoRtttlId ?? '')
 </template>
 
 <style scoped>
-fieldset {
-  margin-bottom: 1rem;
-  border-radius: 8px;
+.intro {
+  margin-bottom: 1.25rem;
 }
-label {
-  display: block;
-  margin: 0.4rem 0;
+fieldset {
+  margin-bottom: 1.1rem;
+  border-radius: var(--radius-md);
+}
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin: 0.6rem 0;
+  font-size: 0.9rem;
+  font-weight: 600;
 }
 textarea {
   width: 100%;
-  font-family: monospace;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 0.88rem;
+  resize: vertical;
 }
 .acciones {
   display: flex;
   gap: 0.5rem;
-  margin-top: 0.5rem;
+  margin-top: 0.6rem;
   flex-wrap: wrap;
 }
+.vacio {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
 .lista {
   list-style: none;
   padding: 0;
   margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
 }
-.lista li {
-  padding: 0.6rem 0;
-  border-bottom: 1px solid #333;
+.tarjeta {
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem 0.9rem;
+  background: var(--bg-card-muted);
 }
-.lista li.activo {
-  color: #3ddc84;
+.tarjeta.activo {
+  border-color: var(--accent-strong);
+  background: var(--color-sage-soft);
+}
+.tarjeta-cabecera {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.5rem;
 }
 .nombre {
-  font-weight: 600;
-  margin-right: 0.5rem;
+  font-weight: 700;
 }
 .etiqueta {
-  font-size: 0.8rem;
-  opacity: 0.8;
-}
-.borrar {
-  color: #e07a7a;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--accent-on);
+  background: var(--accent-strong);
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
 }
 .error {
-  color: #e07a7a;
+  color: var(--color-danger);
   font-size: 0.85rem;
-}
-.aviso {
-  color: #e0c341;
 }
 </style>
