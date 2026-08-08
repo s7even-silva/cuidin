@@ -20,6 +20,7 @@ Nombre de anuncio BLE: `Cuidin` (`BLE_NOMBRE_DISPOSITIVO`).
 | `CARACT_ESCRIBIR` | `6d5a1000-0003-4c1a-8b1a-2f6a9c8e1a01` | WRITE | JSON parcial: solo los campos de `Umbrales` que se quieren cambiar. Tras aplicar, el firmware persiste en NVS y notifica el estado final por `CARACT_LEER`. |
 | `CARACT_SONIDOS` | `6d5a1000-0004-4c1a-8b1a-2f6a9c8e1a01` | READ, NOTIFY, WRITE | Índice de la biblioteca de sonidos RTTTL (lectura/notificación) y comandos de gestión (escritura). Ver [§3](#3-caract_sonidos). |
 | `CARACT_ESTADO` | `6d5a1000-0005-4c1a-8b1a-2f6a9c8e1a01` | READ, NOTIFY | Datos en vivo de los sensores (no ajustes), notificados automáticamente cada ~200ms mientras haya alguien conectado. Ver [§4](#4-caract_estado). |
+| `CARACT_ENFOQUE` | `6d5a1000-0006-4c1a-8b1a-2f6a9c8e1a01` | READ, NOTIFY, WRITE | Config + estado en vivo del Modo Enfoque (temporizador tipo Pomodoro, independiente del sistema de alarmas) y comandos `iniciar`/`detener`/`configurar`. Ver [§5](#5-caract_enfoque). |
 
 ## 1. `CARACT_LEER` — estado completo
 
@@ -163,6 +164,78 @@ Publicado por `estadoAJSON()` en `ble.ino`, `StaticJsonDocument<256>`. A diferen
 | `alarma` | bool | Si la alarma está sonando/activa en este momento. |
 | `mensaje` | string | Texto descriptivo de los problemas activos (ej. `"Poca luz + Corrige tu postura"`), vacío si no hay alarma. |
 
+## 5. `CARACT_ENFOQUE` — Modo Enfoque (Pomodoro)
+
+*(nuevo)*. Temporizador tipo Pomodoro configurable — avisa cuando ya se estuvo suficiente tiempo sentado y toca descansar. **Sistema independiente del de alarmas de umbrales**: `taskAlarma` sigue funcionando sin cambios en paralelo, no se silencian ni se afectan entre sí. El estado vive en el firmware (nueva tarea `taskEnfoque`, `Cuidin/enfoque.ino`), no en el navegador — sigue corriendo aunque se cierre la pestaña o se apague el celular.
+
+Publicado por `enfoqueAJSON()` en `ble.ino`, `StaticJsonDocument<512>`. Un solo JSON combina `config` (ajustes, cambian poco) y `estado` (progreso en vivo, cambia cada segundo). Se renotifica desde `taskEnfoque` aproximadamente cada segundo mientras el modo no está inactivo, y siempre tras cualquier escritura.
+
+### Lectura / notificación
+
+```json
+{
+  "config": {
+    "sesion": 1500,
+    "descCorto": 300,
+    "descLargo": 900,
+    "nSesiones": 4,
+    "debounce": 5,
+    "hito1": 80,
+    "hito2": 90,
+    "volumen": 80,
+    "rtttlId": ""
+  },
+  "estado": {
+    "estado": "en_sesion",
+    "transcurrido": 610,
+    "ciclo": 2
+  }
+}
+```
+
+**Campos de `config`** (corresponden a `ConfigEnfoque` en `cuidinQR.ino`):
+
+| Campo | Tipo | Corresponde a | Descripción |
+|---|---|---|---|
+| `sesion` | int (seg) | `duracion_sesion_seg` | Duración de una sesión de enfoque. Default 1500 (25 min). |
+| `descCorto` | int (seg) | `duracion_descanso_corto_seg` | Duración del descanso corto (entre sesiones normales). Default 300 (5 min). |
+| `descLargo` | int (seg) | `duracion_descanso_largo_seg` | Duración del descanso largo (cada `nSesiones` ciclos). Default 900 (15 min). |
+| `nSesiones` | int | `sesiones_para_descanso_largo` | Cuántas sesiones completas antes de un descanso largo en vez de corto. Default 4. |
+| `debounce` | int (seg) | `debounce_presencia_seg` | Segundos consecutivos de lectura de presencia distinta antes de confirmar pausa/reanudación. Default 5. |
+| `hito1` / `hito2` | int (%) | `aviso_hito1_pct` / `aviso_hito2_pct` | Porcentaje de la sesión en que suena cada beep de aviso. Default 80/90. |
+| `volumen` | int (%) | `volumen` | Volumen de los avisos del Modo Enfoque, independiente de `volumen` de `Umbrales`. |
+| `rtttlId` | string | `sonido_rtttl_id` | Id de una melodía de la biblioteca (§3) para el aviso de fin de etapa. Vacío = patrón generado propio (dos tonos ascendentes). |
+
+**Campos de `estado`** (corresponden a `EstadoEnfoqueLive`, solo lectura, no persistido):
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `estado` | string | Uno de `"inactivo"`, `"en_sesion"`, `"pausado_ausencia"`, `"descanso_corto"`, `"descanso_largo"`. |
+| `transcurrido` | int (seg) | Segundos transcurridos en la etapa actual (sesión o descanso). Se congela (no se descuenta) mientras `pausado_ausencia`. |
+| `ciclo` | int | Sesiones completas en el "run" actual. Se resetea a 0 al detener. |
+
+### Escritura — comandos (campo `accion`)
+
+**Configurar** (JSON parcial, mismo patrón que `CARACT_ESCRIBIR`):
+```json
+{ "accion": "configurar", "sesion": 1500, "descCorto": 300 }
+```
+Aplica los campos presentes, persiste en NVS (`guardarConfigEnfoque()`), renotifica.
+
+**Iniciar sesión** (solo válido si `estado == "inactivo"`; si ya está corriendo, se ignora):
+```json
+{ "accion": "iniciar" }
+```
+Resetea `transcurrido` y `ciclo` a 0, pasa a `"en_sesion"`.
+
+**Detener** (válido desde cualquier estado):
+```json
+{ "accion": "detener" }
+```
+Vuelve a `"inactivo"`, resetea `transcurrido` y `ciclo` a 0.
+
+No hay pausa/reanudación manual en v1 — la única pausa es automática por ausencia de presencia (distancia HC-SR04 combinada con la IA de postura, ver `evaluarPresenciaInstantanea()` en `enfoque.ino`: se considera ausente solo si **ambas** señales coinciden en que no hay nadie).
+
 ## Formato RTTTL soportado
 
 Formato estándar Nokia RTTTL: `nombre:d=<duración>,o=<octava>,b=<bpm>:<notas separadas por coma>`. El parser de firmware (`Cuidin/rtttl.ino`) traduce cada nota a un par (frecuencia Hz, duración ms) y los reproduce en secuencia con la función ya existente `reproducirTono(frecuenciaHz, duracionMs, volumen)` (`audio.ino`). El parser en el frontend (`web/src/lib/rtttl.ts`) es una reimplementación en TypeScript del mismo formato, usada tanto para validar antes de enviar como para el preview de audio en el navegador (Web Audio API).
@@ -172,9 +245,10 @@ Formato estándar Nokia RTTTL: `nombre:d=<duración>,o=<octava>,b=<bpm>:<notas s
 Todo vía `Preferences` (NVS), mismo mecanismo ya usado hoy:
 
 - Namespace `"cuidin"`: struct `Umbrales` completo (ya existente, se le añaden `sonidoRtttlId` y `modoCamara`).
-- Namespace `"sonidos"` *(nuevo)*: pares `id -> (nombre, rtttl)` más una clave `"indice"` con la lista de ids separados por coma (`Preferences` no permite iterar claves dinámicamente).
+- Namespace `"sonidos"`: pares `id -> (nombre, rtttl)` más una clave `"indice"` con la lista de ids separados por coma (`Preferences` no permite iterar claves dinámicamente).
+- Namespace `"enfoque"` *(nuevo)*: struct `ConfigEnfoque` completo. Separado de `"cuidin"` para evitar colisión de claves cortas (ej. `"volumen"` ya existe ahí) y mantener el subsistema independiente. `EstadoEnfoqueLive` NO se persiste (igual que `Lecturas`) — al reiniciar el ESP32, el Modo Enfoque siempre vuelve a `"inactivo"`.
 
 ## Notas de compatibilidad
 
-- Todos los campos y características nuevos (`sonidoRtttlId`, `modoCamara`, `CARACT_SONIDOS`, `CARACT_ESTADO`) son aditivos: un frontend viejo que no los conozca sigue funcionando contra el resto del protocolo sin romperse, porque `CARACT_ESCRIBIR` ignora silenciosamente las claves que no reconoce y el firmware sigue publicando el resto de campos/características igual.
+- Todos los campos y características nuevos (`sonidoRtttlId`, `modoCamara`, `CARACT_SONIDOS`, `CARACT_ESTADO`, `CARACT_ENFOQUE`) son aditivos: un frontend viejo que no los conozca sigue funcionando contra el resto del protocolo sin romperse, porque `CARACT_ESCRIBIR` ignora silenciosamente las claves que no reconoce y el firmware sigue publicando el resto de campos/características igual.
 - No hay autenticación ni cifrado a nivel de aplicación (decisión consciente, ver plan de implementación). El firmware valida rangos y límites de todo dato recibido antes de persistir, para no corromper su propio estado, aunque no autentique quién lo envía.

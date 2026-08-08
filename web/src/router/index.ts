@@ -27,6 +27,11 @@ const router = createRouter({
       name: 'estado',
       component: () => import('../views/StatusView.vue'),
     },
+    {
+      path: '/enfoque',
+      name: 'enfoque',
+      component: () => import('../views/FocusView.vue'),
+    },
   ],
 })
 

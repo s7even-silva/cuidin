@@ -1,6 +1,6 @@
 <script setup lang="ts">
 defineProps<{
-  seccion: 'conexion' | 'umbrales' | 'sonidos' | 'estado'
+  seccion: 'conexion' | 'umbrales' | 'sonidos' | 'estado' | 'enfoque'
 }>()
 </script>
 
@@ -27,6 +27,10 @@ defineProps<{
       <circle cx="6.5" cy="18" r="2.5" />
       <circle cx="16.5" cy="16" r="2.5" />
     </template>
-    <path v-else d="M3 12h4l2-7 4 14 2-7h6" />
+    <path v-else-if="seccion === 'estado'" d="M3 12h4l2-7 4 14 2-7h6" />
+    <template v-else>
+      <circle cx="12" cy="13" r="8" />
+      <path d="M12 9v4l3 2M9 2h6" />
+    </template>
   </svg>
 </template>

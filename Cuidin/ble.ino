@@ -5,7 +5,7 @@
 
 // ======================= BLE: SERVIDOR DE AJUSTES =======================
 // El ESP32 es el Peripheral BLE; la pagina web (Web Bluetooth API) es el
-// Central. Cuatro caracteristicas, todas en formato JSON como texto plano
+// Central. Cinco caracteristicas, todas en formato JSON como texto plano
 // UTF-8 (protocolo completo documentado en docs/protocol.md del repo):
 //
 //   UUID_CARACT_LEER     (NOTIFY + READ): el ESP32 publica aqui el JSON con
@@ -19,15 +19,22 @@
 //   UUID_CARACT_ESTADO   (NOTIFY + READ): datos en vivo de los sensores
 //                         (no ajustes) - se actualiza automaticamente cada
 //                         ~200ms mientras haya alguien conectado.
+//   UUID_CARACT_ENFOQUE  (NOTIFY + READ + WRITE): config + estado en vivo
+//                         del Modo Enfoque (temporizador tipo Pomodoro,
+//                         sistema independiente de las alarmas de
+//                         umbrales) y comandos iniciar/detener/configurar.
+//                         Ver enfoque.ino.
 #define UUID_SERVICIO            "6d5a1000-0001-4c1a-8b1a-2f6a9c8e1a01"
 #define UUID_CARACT_LEER         "6d5a1000-0002-4c1a-8b1a-2f6a9c8e1a01"
 #define UUID_CARACT_ESCRIBIR     "6d5a1000-0003-4c1a-8b1a-2f6a9c8e1a01"
 #define UUID_CARACT_SONIDOS      "6d5a1000-0004-4c1a-8b1a-2f6a9c8e1a01"
 #define UUID_CARACT_ESTADO       "6d5a1000-0005-4c1a-8b1a-2f6a9c8e1a01"
+#define UUID_CARACT_ENFOQUE      "6d5a1000-0006-4c1a-8b1a-2f6a9c8e1a01"
 
 BLECharacteristic *caractLeer;
 BLECharacteristic *caractSonidos;
 BLECharacteristic *caractEstado;
+BLECharacteristic *caractEnfoque;
 
 // Datos en vivo (no ajustes) para mostrar en la pagina web: lo mismo que
 // ya se ve en la pantalla del dispositivo. postura viene como texto para
@@ -187,6 +194,112 @@ class CallbackSonidos : public BLECharacteristicCallbacks {
   }
 };
 
+// ======================= CARACT_ENFOQUE: Modo Enfoque (Pomodoro) =======================
+const char* textoEstadoEnfoque(EstadoEnfoque e) {
+  switch (e) {
+    case ENFOQUE_EN_SESION:        return "en_sesion";
+    case ENFOQUE_PAUSADO_AUSENCIA: return "pausado_ausencia";
+    case ENFOQUE_DESCANSO_CORTO:   return "descanso_corto";
+    case ENFOQUE_DESCANSO_LARGO:   return "descanso_largo";
+    default:                       return "inactivo";
+  }
+}
+
+String enfoqueAJSON() {
+  ConfigEnfoque cfg;
+  EstadoEnfoqueLive est;
+  if (bloquearEnfoque()) {
+    cfg = enfoqueConfig;
+    est = enfoqueEstado;
+    liberarEnfoque();
+  }
+
+  StaticJsonDocument<512> doc;
+  JsonObject config = doc.createNestedObject("config");
+  config["sesion"]    = cfg.duracion_sesion_seg;
+  config["descCorto"] = cfg.duracion_descanso_corto_seg;
+  config["descLargo"] = cfg.duracion_descanso_largo_seg;
+  config["nSesiones"] = cfg.sesiones_para_descanso_largo;
+  config["debounce"]  = cfg.debounce_presencia_seg;
+  config["hito1"]      = cfg.aviso_hito1_pct;
+  config["hito2"]      = cfg.aviso_hito2_pct;
+  config["volumen"]    = cfg.volumen;
+  config["rtttlId"]    = cfg.sonido_rtttl_id;
+
+  JsonObject estado = doc.createNestedObject("estado");
+  estado["estado"]       = textoEstadoEnfoque(est.estado);
+  estado["transcurrido"] = est.segundos_transcurridos;
+  estado["ciclo"]        = est.ciclos_completados;
+
+  String salida;
+  serializeJson(doc, salida);
+  return salida;
+}
+
+void notificarEstadoEnfoque() {
+  if (caractEnfoque == nullptr) return;
+  String json = enfoqueAJSON();
+  caractEnfoque->setValue((uint8_t*)json.c_str(), json.length());
+  caractEnfoque->notify();
+}
+
+class CallbackEnfoque : public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic *caract) override {
+    String valor = caract->getValue();
+    if (valor.length() == 0) return;
+
+    StaticJsonDocument<512> doc;
+    DeserializationError err = deserializeJson(doc, valor);
+    if (err) {
+      Serial.println("JSON invalido recibido en CARACT_ENFOQUE, se ignora.");
+      return;
+    }
+
+    String accion = doc["accion"] | "";
+
+    if (accion == "configurar") {
+      if (bloquearEnfoque()) {
+        if (doc.containsKey("sesion"))    enfoqueConfig.duracion_sesion_seg          = doc["sesion"];
+        if (doc.containsKey("descCorto")) enfoqueConfig.duracion_descanso_corto_seg  = doc["descCorto"];
+        if (doc.containsKey("descLargo")) enfoqueConfig.duracion_descanso_largo_seg  = doc["descLargo"];
+        if (doc.containsKey("nSesiones")) enfoqueConfig.sesiones_para_descanso_largo = doc["nSesiones"];
+        if (doc.containsKey("debounce"))  enfoqueConfig.debounce_presencia_seg       = doc["debounce"];
+        if (doc.containsKey("hito1"))     enfoqueConfig.aviso_hito1_pct              = doc["hito1"];
+        if (doc.containsKey("hito2"))     enfoqueConfig.aviso_hito2_pct              = doc["hito2"];
+        if (doc.containsKey("volumen"))   enfoqueConfig.volumen                      = doc["volumen"];
+        if (doc.containsKey("rtttlId"))   enfoqueConfig.sonido_rtttl_id              = doc["rtttlId"].as<String>();
+        liberarEnfoque();
+      }
+      guardarConfigEnfoque();
+      notificarEstadoEnfoque();
+    } else if (accion == "iniciar") {
+      if (bloquearEnfoque()) {
+        if (enfoqueEstado.estado == ENFOQUE_INACTIVO) {
+          enfoqueEstado.estado = ENFOQUE_EN_SESION;
+          enfoqueEstado.segundos_transcurridos = 0;
+          enfoqueEstado.ciclos_completados = 0;
+          enfoqueEstado.aviso80_emitido = false;
+          enfoqueEstado.aviso90_emitido = false;
+        }
+        liberarEnfoque();
+      }
+      notificarEstadoEnfoque();
+    } else if (accion == "detener") {
+      if (bloquearEnfoque()) {
+        enfoqueEstado.estado = ENFOQUE_INACTIVO;
+        enfoqueEstado.segundos_transcurridos = 0;
+        enfoqueEstado.ciclos_completados = 0;
+        enfoqueEstado.aviso80_emitido = false;
+        enfoqueEstado.aviso90_emitido = false;
+        liberarEnfoque();
+      }
+      notificarEstadoEnfoque();
+    } else {
+      Serial.println("Accion desconocida en CARACT_ENFOQUE, se ignora.");
+    }
+  }
+};
+
 void iniciarBLE() {
   BLEDevice::init(BLE_NOMBRE_DISPOSITIVO);
   BLEServer *servidor = BLEDevice::createServer();
@@ -215,6 +328,14 @@ void iniciarBLE() {
   caractEstado->addDescriptor(new BLE2902());
   String estadoInicial = estadoAJSON();
   caractEstado->setValue((uint8_t*)estadoInicial.c_str(), estadoInicial.length());
+
+  caractEnfoque = servicio->createCharacteristic(
+      UUID_CARACT_ENFOQUE,
+      BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY | BLECharacteristic::PROPERTY_WRITE);
+  caractEnfoque->addDescriptor(new BLE2902());
+  caractEnfoque->setCallbacks(new CallbackEnfoque());
+  String enfoqueInicial = enfoqueAJSON();
+  caractEnfoque->setValue((uint8_t*)enfoqueInicial.c_str(), enfoqueInicial.length());
 
   servicio->start();
   BLEAdvertising *publicidad = BLEDevice::getAdvertising();

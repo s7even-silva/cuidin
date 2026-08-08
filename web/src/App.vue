@@ -5,6 +5,7 @@ import { useBleStore } from './stores/ble'
 import { useUmbralesStore } from './stores/umbrales'
 import { useSonidosStore } from './stores/sonidos'
 import { useEstadoStore } from './stores/estado'
+import { useEnfoqueStore } from './stores/enfoque'
 import { useTheme } from './composables/useTheme'
 
 const ble = useBleStore()
@@ -18,6 +19,7 @@ const { tema, alternarTema } = useTheme()
 useUmbralesStore()
 useSonidosStore()
 useEstadoStore()
+useEnfoqueStore()
 
 const puntoColor: Record<string, string> = {
   conectado: 'var(--accent-strong)',
@@ -32,6 +34,7 @@ const secciones = [
   { to: '/umbrales', etiqueta: 'Umbrales', icono: 'umbrales' as const },
   { to: '/sonidos', etiqueta: 'Sonidos', icono: 'sonidos' as const },
   { to: '/estado', etiqueta: 'Estado', icono: 'estado' as const },
+  { to: '/enfoque', etiqueta: 'Enfoque', icono: 'enfoque' as const },
 ]
 </script>
 

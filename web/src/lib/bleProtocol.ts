@@ -8,6 +8,7 @@ export const UUID_CARACT_LEER = '6d5a1000-0002-4c1a-8b1a-2f6a9c8e1a01'
 export const UUID_CARACT_ESCRIBIR = '6d5a1000-0003-4c1a-8b1a-2f6a9c8e1a01'
 export const UUID_CARACT_SONIDOS = '6d5a1000-0004-4c1a-8b1a-2f6a9c8e1a01'
 export const UUID_CARACT_ESTADO = '6d5a1000-0005-4c1a-8b1a-2f6a9c8e1a01'
+export const UUID_CARACT_ENFOQUE = '6d5a1000-0006-4c1a-8b1a-2f6a9c8e1a01'
 
 export interface Umbrales {
   dist: number
@@ -88,3 +89,41 @@ export type ComandoSonidos =
 
 export const LIMITE_SONIDOS = 8
 // LIMITE_CARACTERES_RTTTL vive en lib/rtttl.ts, junto al parser que lo usa.
+
+// Modo Enfoque — temporizador tipo Pomodoro, independiente del sistema de
+// alarmas de umbrales. El estado vive en el firmware (taskEnfoque), la web
+// solo configura y observa.
+export type EstadoEnfoqueTexto =
+  | 'inactivo'
+  | 'en_sesion'
+  | 'pausado_ausencia'
+  | 'descanso_corto'
+  | 'descanso_largo'
+
+export interface ConfigEnfoque {
+  sesion: number
+  descCorto: number
+  descLargo: number
+  nSesiones: number
+  debounce: number
+  hito1: number
+  hito2: number
+  volumen: number
+  rtttlId: string
+}
+
+export interface EstadoEnfoqueLive {
+  estado: EstadoEnfoqueTexto
+  transcurrido: number
+  ciclo: number
+}
+
+export interface PayloadEnfoque {
+  config: ConfigEnfoque
+  estado: EstadoEnfoqueLive
+}
+
+export type ComandoEnfoque =
+  | ({ accion: 'configurar' } & Partial<ConfigEnfoque>)
+  | { accion: 'iniciar' }
+  | { accion: 'detener' }
