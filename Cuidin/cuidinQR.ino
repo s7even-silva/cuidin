@@ -30,6 +30,39 @@ struct SonidoMeta {
   String nombre;
 };
 
+// Mismo motivo: enfoqueAJSON() (enfoque.ino) y el callback BLE usan este
+// tipo, asi que debe existir antes de los prototipos autogenerados.
+enum EstadoEnfoque {
+  ENFOQUE_INACTIVO,
+  ENFOQUE_EN_SESION,
+  ENFOQUE_PAUSADO_AUSENCIA,
+  ENFOQUE_DESCANSO_CORTO,
+  ENFOQUE_DESCANSO_LARGO,
+};
+
+// Mismo motivo: reproducirFinEtapaEnfoque() (enfoque.ino) usa este tipo en
+// su firma, asi que debe existir antes de los prototipos autogenerados.
+struct ConfigEnfoque {
+  uint16_t duracion_sesion_seg          = 25 * 60; // 25 min, default tipo Pomodoro (editable)
+  uint16_t duracion_descanso_corto_seg  = 5  * 60;  // 5 min
+  uint16_t duracion_descanso_largo_seg  = 15 * 60;  // 15 min
+  uint8_t  sesiones_para_descanso_largo = 4;        // cada 4 sesiones, descanso largo
+  uint8_t  debounce_presencia_seg       = 5;        // segundos consecutivos para confirmar cambio de presencia
+  uint8_t  aviso_hito1_pct              = 80;       // % de la etapa en que suena el primer beep
+  uint8_t  aviso_hito2_pct              = 90;       // % del segundo beep
+  uint8_t  volumen                      = 80;       // 0-100%, independiente de umbrales.volumen
+  String   sonido_rtttl_id              = "";       // id de sonidos.ino para el aviso de fin de etapa;
+                                                      // vacio = patron generado propio (ver enfoque.ino)
+};
+
+struct EstadoEnfoqueLive {
+  EstadoEnfoque estado                 = ENFOQUE_INACTIVO;
+  uint16_t      segundos_transcurridos = 0; // en la etapa actual (sesion o descanso)
+  uint8_t       ciclos_completados     = 0; // sesiones completas en este "run"; se resetea al Detener
+  bool          aviso80_emitido        = false;
+  bool          aviso90_emitido        = false;
+};
+
 #include <Wire.h>
 #include <SPI.h>
 #include <Adafruit_GFX.h>
@@ -270,6 +303,24 @@ void liberarDatos() {
   xSemaphoreGive(xDatosMutex);
 }
 
+// ======================= MODO ENFOQUE (PROTEGIDO POR MUTEX PROPIO) =======================
+// Sistema independiente del de alarmas: temporizador tipo Pomodoro
+// configurable, ver enfoque.ino. ConfigEnfoque se persiste en NVS
+// (namespace "enfoque"); EstadoEnfoqueLive NO se persiste, igual que
+// Lecturas - si el ESP32 se reinicia, el modo vuelve a ENFOQUE_INACTIVO.
+// (structs ConfigEnfoque/EstadoEnfoqueLive ya declarados al principio del
+// archivo, antes de los #include, junto a EstadoEnfoque)
+ConfigEnfoque enfoqueConfig;
+EstadoEnfoqueLive enfoqueEstado;
+SemaphoreHandle_t xEnfoqueMutex;
+
+bool bloquearEnfoque(TickType_t espera = pdMS_TO_TICKS(100)) {
+  return xSemaphoreTake(xEnfoqueMutex, espera) == pdTRUE;
+}
+void liberarEnfoque() {
+  xSemaphoreGive(xEnfoqueMutex);
+}
+
 // ---- Prototipos ----
 void iniciarPantalla();
 void iniciarBusI2S();
@@ -284,6 +335,7 @@ void taskAlarma(void *parametro);
 void taskCamaraIA(void *parametro);
 #endif
 void taskPantalla(void *parametro);
+void taskEnfoque(void *parametro);
 float medirDistanciaCm();
 void reproducirTono(float frecuenciaHz, int duracionMs, float volumen = 1.0f);
 void dibujarPantalla(const Lecturas &copia, PosturaEstado postura, const Umbrales &u);
@@ -331,6 +383,13 @@ void setup() {
   }
   cargarUmbrales(); // trae lo guardado en NVS (o los valores de fabrica si es la primera vez)
 
+  xEnfoqueMutex = xSemaphoreCreateMutex();
+  if (xEnfoqueMutex == NULL) {
+    Serial.println("ERROR: no se pudo crear el mutex de enfoque. Deteniendo.");
+    while (true) { delay(1000); }
+  }
+  cargarConfigEnfoque();
+
   iniciarSD(); // sonidos de alarma; si no hay SD, cae a los patrones generados
   iniciarBLE(); // servidor BLE con los ajustes (ver documento del protocolo)
 
@@ -340,6 +399,7 @@ void setup() {
   xTaskCreatePinnedToCore(taskSensores,  "TaskSensores",  3072, NULL, 2, NULL, 0);
   xTaskCreatePinnedToCore(taskAudio,     "TaskAudio",     3072, NULL, 3, NULL, 0);
   xTaskCreatePinnedToCore(taskAlarma,    "TaskAlarma",    3072, NULL, 4, NULL, 0);
+  xTaskCreatePinnedToCore(taskEnfoque,   "TaskEnfoque",   3072, NULL, 1, NULL, 0);
   #if ENABLE_CAMERA
     xTaskCreatePinnedToCore(taskCamaraIA, "TaskCamaraIA", 16384, NULL, 1, NULL, 1);
   #endif

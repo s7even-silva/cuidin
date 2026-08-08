@@ -5,6 +5,7 @@ import {
   UUID_CARACT_ESCRIBIR,
   UUID_CARACT_SONIDOS,
   UUID_CARACT_ESTADO,
+  UUID_CARACT_ENFOQUE,
 } from '../lib/bleProtocol'
 
 export type EstadoConexion = 'inactivo' | 'conectando' | 'conectado' | 'desconectado' | 'error'
@@ -18,11 +19,13 @@ const caractLeer = shallowRef<BluetoothRemoteGATTCharacteristic | null>(null)
 const caractEscribir = shallowRef<BluetoothRemoteGATTCharacteristic | null>(null)
 const caractSonidos = shallowRef<BluetoothRemoteGATTCharacteristic | null>(null)
 const caractEstado = shallowRef<BluetoothRemoteGATTCharacteristic | null>(null)
+const caractEnfoque = shallowRef<BluetoothRemoteGATTCharacteristic | null>(null)
 
 type ListenerJSON = (json: unknown) => void
 const listenersLeer = new Set<ListenerJSON>()
 const listenersSonidos = new Set<ListenerJSON>()
 const listenersEstado = new Set<ListenerJSON>()
+const listenersEnfoque = new Set<ListenerJSON>()
 
 const decodificador = new TextDecoder('utf-8')
 const codificador = new TextEncoder()
@@ -49,6 +52,7 @@ function alDesconectar() {
   caractEscribir.value = null
   caractSonidos.value = null
   caractEstado.value = null
+  caractEnfoque.value = null
 }
 
 async function conectar() {
@@ -88,6 +92,7 @@ async function conectarGatt(device: BluetoothDevice) {
   caractEscribir.value = await servicio.getCharacteristic(UUID_CARACT_ESCRIBIR)
   caractSonidos.value = await servicio.getCharacteristic(UUID_CARACT_SONIDOS)
   caractEstado.value = await servicio.getCharacteristic(UUID_CARACT_ESTADO)
+  caractEnfoque.value = await servicio.getCharacteristic(UUID_CARACT_ENFOQUE)
 
   caractLeer.value.addEventListener('characteristicvaluechanged', (e) =>
     parsearEventoJSON(e, listenersLeer),
@@ -104,7 +109,12 @@ async function conectarGatt(device: BluetoothDevice) {
   )
   await caractEstado.value.startNotifications()
 
-  // Lectura inicial de las tres características (no hay que esperar a la
+  caractEnfoque.value.addEventListener('characteristicvaluechanged', (e) =>
+    parsearEventoJSON(e, listenersEnfoque),
+  )
+  await caractEnfoque.value.startNotifications()
+
+  // Lectura inicial de las cuatro características (no hay que esperar a la
   // primera notificación para tener el estado actual).
   const valorLeer = await caractLeer.value.readValue()
   parsearValorJSON(valorLeer, listenersLeer)
@@ -114,6 +124,9 @@ async function conectarGatt(device: BluetoothDevice) {
 
   const valorEstado = await caractEstado.value.readValue()
   parsearValorJSON(valorEstado, listenersEstado)
+
+  const valorEnfoque = await caractEnfoque.value.readValue()
+  parsearValorJSON(valorEnfoque, listenersEnfoque)
 
   estado.value = 'conectado'
   ultimoError.value = null
@@ -145,6 +158,12 @@ async function escribirComandoSonidos(comando: Record<string, unknown>) {
   await caractSonidos.value.writeValue(payload)
 }
 
+async function escribirComandoEnfoque(comando: Record<string, unknown>) {
+  if (!caractEnfoque.value) throw new Error('No hay conexión activa con Cuidín.')
+  const payload = codificador.encode(JSON.stringify(comando))
+  await caractEnfoque.value.writeValue(payload)
+}
+
 function suscribirseAUmbrales(fn: ListenerJSON) {
   listenersLeer.add(fn)
   return () => listenersLeer.delete(fn)
@@ -158,6 +177,11 @@ function suscribirseASonidos(fn: ListenerJSON) {
 function suscribirseAEstado(fn: ListenerJSON) {
   listenersEstado.add(fn)
   return () => listenersEstado.delete(fn)
+}
+
+function suscribirseAEnfoque(fn: ListenerJSON) {
+  listenersEnfoque.add(fn)
+  return () => listenersEnfoque.delete(fn)
 }
 
 /**
@@ -175,8 +199,10 @@ export function useBleConnection() {
     desconectar,
     escribirUmbrales,
     escribirComandoSonidos,
+    escribirComandoEnfoque,
     suscribirseAUmbrales,
     suscribirseASonidos,
     suscribirseAEstado,
+    suscribirseAEnfoque,
   }
 }
