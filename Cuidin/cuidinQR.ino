@@ -56,7 +56,6 @@ struct SonidoMeta {
 #include <BLE2902.h>
 #include <ArduinoJson.h>   // Library Manager: "ArduinoJson" de Benoit Blanchon
 #include <Preferences.h>
-#include <TJpg_Decoder.h>  // Library Manager: "TJpg_Decoder" de Bodmer (logo de arranque)
 // La URL de GitHub Pages es fija (no depende de IP local), asi que el QR
 // se genera una sola vez con un texto conocido de antemano.
 #define QRCODEGEN_MAX_VERSION 10
