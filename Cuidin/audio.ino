@@ -14,13 +14,43 @@
 
 bool sdDisponible = false;
 
-bool debeSeguirSonandoAlarma() {
-  bool activa = false;
-  if (bloquearDatos()) {
-    activa = datos.alarma_activa;
-    liberarDatos();
+// ======================= CORTE DE SONIDO EN CURSO =======================
+// Mecanismo generico: reproducirTono()/reproducirWAVDesdeSD()/reproducirRTTTL()
+// son bloqueantes y se usan tanto por taskSonidoAlarma (alarma de umbrales)
+// como por taskEnfoque (avisos del Modo Enfoque, ver enfoque.ino). Cada
+// "dueno" del sonido en curso marca su propia condicion de corte con
+// iniciarReproduccion(); el helper generico debeSeguirReproduciendo() es lo
+// que consultan las funciones de audio antes de cada bloque/tono.
+// (enum DuenoSonido ya declarado en cuidinQR.ino, antes de los #include)
+DuenoSonido duenoSonidoActual = SONIDO_NINGUNO;
+
+void iniciarReproduccion(DuenoSonido dueno) {
+  duenoSonidoActual = dueno;
+}
+
+void terminarReproduccion() {
+  duenoSonidoActual = SONIDO_NINGUNO;
+}
+
+bool debeSeguirReproduciendo() {
+  switch (duenoSonidoActual) {
+    case SONIDO_ALARMA: {
+      bool activa = false;
+      if (bloquearDatos()) {
+        activa = datos.alarma_activa;
+        liberarDatos();
+      }
+      return activa;
+    }
+    case SONIDO_ENFOQUE:
+    case SONIDO_PRUEBA:
+      // Los avisos del Modo Enfoque y las pruebas manuales de sonido desde
+      // la web son cortos y no dependen de alarma_activa; se dejan terminar
+      // siempre (no hay condicion externa de corte en v1).
+      return true;
+    default:
+      return true;
   }
-  return activa;
 }
 
 void iniciarSD() {
@@ -71,7 +101,7 @@ bool reproducirWAVDesdeSD(const char* ruta, float volumen) {
   static int32_t bloqueSalida[TAM_BLOQUE * 2];
 
   while (archivo.available()) {
-    if (!debeSeguirSonandoAlarma()) break; // la alarma ya se resolvio: cortar aqui
+    if (!debeSeguirReproduciendo()) break; // corte solicitado por el dueno actual del sonido
 
     size_t bytesAPedir = sizeof(int16_t) * (numCanales == 2 ? TAM_BLOQUE * 2 : TAM_BLOQUE);
     int bytesLeidos = archivo.read((uint8_t*)bloqueLeido, bytesAPedir);
@@ -222,7 +252,7 @@ void reproducirTono(float frecuenciaHz, int duracionMs, float volumen) {
   static float fase = 0;
   int muestrasEscritas = 0;
   while (muestrasEscritas < totalMuestras) {
-    if (!debeSeguirSonandoAlarma()) return; // corte inmediato, no solo al final del tono
+    if (!debeSeguirReproduciendo()) return; // corte solicitado por el dueno actual del sonido
 
     int enEsteBloque = min(TAM_BLOQUE, totalMuestras - muestrasEscritas);
     for (int i = 0; i < enEsteBloque; i++) {

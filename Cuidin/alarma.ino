@@ -112,7 +112,9 @@ void taskSonidoAlarma(void *parametro) {
 
     if (activa && u.alarma_habilitada) {
       String rtttl = buscarRTTTLPorId(u.sonido_rtttl_id);
+      iniciarReproduccion(SONIDO_ALARMA);
       reproducirAlarmaSonora(u.patron_sonido, u.volumen, rtttl);
+      terminarReproduccion();
     } else {
       vTaskDelay(pdMS_TO_TICKS(150));
     }

@@ -98,7 +98,7 @@ void reproducirRTTTL(const String &rtttl, float volumen) {
 
   int inicio = 0;
   while (inicio < (int)notas.length()) {
-    if (!debeSeguirSonandoAlarma()) return; // corte inmediato
+    if (!debeSeguirReproduciendo()) return; // corte solicitado por el dueno actual del sonido
 
     int coma = notas.indexOf(',', inicio);
     if (coma < 0) coma = notas.length();
@@ -149,7 +149,7 @@ void reproducirRTTTL(const String &rtttl, float volumen) {
     } else {
       int restante = (int)duracionMs;
       while (restante > 0) {
-        if (!debeSeguirSonandoAlarma()) return;
+        if (!debeSeguirReproduciendo()) return;
         int paso = min(50, restante);
         delay(paso);
         restante -= paso;

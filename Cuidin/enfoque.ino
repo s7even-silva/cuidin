@@ -163,11 +163,18 @@ void taskEnfoque(void *parametro) {
     }
 
     // Llamadas de audio FUERA del mutex (bloqueantes, no deben retenerlo).
+    // iniciarReproduccion(SONIDO_ENFOQUE) evita que debeSeguirReproduciendo()
+    // (audio.ino) las corte por depender de datos.alarma_activa, que no
+    // tiene relacion con los avisos del Modo Enfoque.
     if (dispararAviso80 || dispararAviso90) {
+      iniciarReproduccion(SONIDO_ENFOQUE);
       reproducirTono(1000.0f, 120, constrain(cfg.volumen, 0, 100) / 100.0f);
+      terminarReproduccion();
     }
     if (dispararFinEtapa) {
+      iniciarReproduccion(SONIDO_ENFOQUE);
       reproducirFinEtapaEnfoque(cfg);
+      terminarReproduccion();
     }
 
     notificarEstadoEnfoque();

@@ -186,7 +186,9 @@ class CallbackSonidos : public BLECharacteristicCallbacks {
       if (rtttl.length() > 0) {
         int volumenActual = 80;
         if (bloquearUmbrales()) { volumenActual = umbrales.volumen; liberarUmbrales(); }
+        iniciarReproduccion(SONIDO_PRUEBA);
         reproducirRTTTL(rtttl, constrain(volumenActual, 0, 100) / 100.0f);
+        terminarReproduccion();
       }
     } else {
       Serial.println("Accion desconocida en CARACT_SONIDOS, se ignora.");

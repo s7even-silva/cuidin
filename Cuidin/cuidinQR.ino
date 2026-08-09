@@ -27,6 +27,13 @@ enum PosturaEstado { POSTURA_OK, POSTURA_MALA, POSTURA_SIN_PERSONA, POSTURA_DESC
 // prototipos autogenerados.
 typedef bool (*FuncionDebeContinuar)();
 
+// Mismo motivo: iniciarReproduccion() (audio.ino) usa este tipo en su
+// firma, asi que debe existir antes de los prototipos autogenerados.
+// Identifica quien es el "dueno" del sonido bloqueante en curso
+// (reproducirTono/reproducirRTTTL/reproducirWAVDesdeSD), para que
+// debeSeguirReproduciendo() sepa bajo que condicion cortarlo.
+enum DuenoSonido { SONIDO_NINGUNO, SONIDO_ALARMA, SONIDO_ENFOQUE, SONIDO_PRUEBA };
+
 // Mismo motivo que PosturaEstado arriba: listarSonidos() (sonidos.ino)
 // devuelve/recibe este tipo, asi que debe existir antes de los prototipos
 // autogenerados.
@@ -425,11 +432,6 @@ void setup() {
 
   Serial.println("Tareas creadas. loop() queda inactivo.");
 }
-
-void loop() {
-  vTaskDelay(pdMS_TO_TICKS(1000));
-}
-
 
 void loop() {
   vTaskDelay(pdMS_TO_TICKS(1000));
