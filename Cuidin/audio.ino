@@ -14,7 +14,20 @@
 
 bool sdDisponible = false;
 
+bool debeSeguirSonandoAlarma() {
+  bool activa = false;
+  if (bloquearDatos()) {
+    activa = datos.alarma_activa;
+    liberarDatos();
+  }
+  return activa;
+}
+
 void iniciarSD() {
+  // IMPORTANTE: con la placa generica "ESP32S3 Dev Module", el core no
+  // asume automaticamente que la SD esta en 39/38/40 - hay que decirselo
+  // explicitamente antes de begin(), si no busca en los pines por defecto
+  // del core (que no son estos) y nunca la encuentra.
   SD_MMC.setPins(39, 38, 40); // CLK, CMD, D0
   if (!SD_MMC.begin("/sdcard", true)) { // true = modo de 1 bit
     Serial.println("SD no detectada. Se usaran los patrones de sonido generados.");
@@ -58,6 +71,8 @@ bool reproducirWAVDesdeSD(const char* ruta, float volumen) {
   static int32_t bloqueSalida[TAM_BLOQUE * 2];
 
   while (archivo.available()) {
+    if (!debeSeguirSonandoAlarma()) break; // la alarma ya se resolvio: cortar aqui
+
     size_t bytesAPedir = sizeof(int16_t) * (numCanales == 2 ? TAM_BLOQUE * 2 : TAM_BLOQUE);
     int bytesLeidos = archivo.read((uint8_t*)bloqueLeido, bytesAPedir);
     if (bytesLeidos <= 0) break;
@@ -207,6 +222,8 @@ void reproducirTono(float frecuenciaHz, int duracionMs, float volumen) {
   static float fase = 0;
   int muestrasEscritas = 0;
   while (muestrasEscritas < totalMuestras) {
+    if (!debeSeguirSonandoAlarma()) return; // corte inmediato, no solo al final del tono
+
     int enEsteBloque = min(TAM_BLOQUE, totalMuestras - muestrasEscritas);
     for (int i = 0; i < enEsteBloque; i++) {
       int16_t muestra16 = (int16_t)(sinf(fase) * AMPLITUD_TONO * volumen);
