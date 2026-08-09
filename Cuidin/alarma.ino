@@ -86,13 +86,35 @@ void taskAlarma(void *parametro) {
       liberarDatos();
     }
 
-    if (alarma) {
-      String rtttl = buscarRTTTLPorId(u.sonido_rtttl_id);
-      reproducirAlarmaSonora(u.patron_sonido, u.volumen, rtttl);
-    }
+    // El sonido YA NO se reproduce aqui (ver TaskSonidoAlarma, abajo):
+    // reproducirAlarmaSonora() es bloqueante y podia tardar lo que dure el
+    // WAV/RTTTL completo, dejando esta tarea sin re-evaluar sensores.
 
     notificarEstadoActual(); // datos en vivo por BLE (caracteristica 0005)
 
     vTaskDelay(pdMS_TO_TICKS(200));
+  }
+}
+
+void taskSonidoAlarma(void *parametro) {
+  for (;;) {
+    bool activa = false;
+    Umbrales u;
+
+    if (bloquearDatos()) {
+      activa = datos.alarma_activa;
+      liberarDatos();
+    }
+    if (bloquearUmbrales()) {
+      u = umbrales;
+      liberarUmbrales();
+    }
+
+    if (activa && u.alarma_habilitada) {
+      String rtttl = buscarRTTTLPorId(u.sonido_rtttl_id);
+      reproducirAlarmaSonora(u.patron_sonido, u.volumen, rtttl);
+    } else {
+      vTaskDelay(pdMS_TO_TICKS(150));
+    }
   }
 }
