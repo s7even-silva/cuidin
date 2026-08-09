@@ -22,6 +22,11 @@
 // does not name a type").
 enum PosturaEstado { POSTURA_OK, POSTURA_MALA, POSTURA_SIN_PERSONA, POSTURA_DESCONOCIDA };
 
+// Igual que PosturaEstado arriba: este tipo se usa como parametro en
+// funciones de audio.ino y rtttl.ino, tiene que existir antes de los
+// prototipos autogenerados.
+typedef bool (*FuncionDebeContinuar)();
+
 // Mismo motivo que PosturaEstado arriba: listarSonidos() (sonidos.ino)
 // devuelve/recibe este tipo, asi que debe existir antes de los prototipos
 // autogenerados.
@@ -89,12 +94,14 @@ struct EstadoEnfoqueLive {
 #include <BLE2902.h>
 #include <ArduinoJson.h>   // Library Manager: "ArduinoJson" de Benoit Blanchon
 #include <Preferences.h>
+//#include <TJpg_Decoder.h>  // Library Manager: "TJpg_Decoder" de Bodmer (logo de arranque)
 // La URL de GitHub Pages es fija (no depende de IP local), asi que el QR
 // se genera una sola vez con un texto conocido de antemano.
 #define QRCODEGEN_MAX_VERSION 10
 #include "qrcodegen.h"   // archivos locales (qrcodegen.h/.c) junto al .ino, NO instalados como libreria
 
 // ======================= CONFIGURACION GENERAL =======================
+SET_LOOP_TASK_STACK_SIZE(32 * 1024);
 // Pon esto en 0 si quieres probar primero solo los sensores, sin camara.
 #define ENABLE_CAMERA 1
 
@@ -313,6 +320,14 @@ void liberarDatos() {
 ConfigEnfoque enfoqueConfig;
 EstadoEnfoqueLive enfoqueEstado;
 SemaphoreHandle_t xEnfoqueMutex;
+SemaphoreHandle_t xAudioMutex;
+
+bool bloquearAudio(TickType_t espera = pdMS_TO_TICKS(2000)) {
+  return xSemaphoreTake(xAudioMutex, espera) == pdTRUE;
+}
+void liberarAudio() {
+  xSemaphoreGive(xAudioMutex);
+}
 
 bool bloquearEnfoque(TickType_t espera = pdMS_TO_TICKS(100)) {
   return xSemaphoreTake(xEnfoqueMutex, espera) == pdTRUE;
@@ -331,11 +346,11 @@ void pantallaBienvenida();
 void taskSensores(void *parametro);
 void taskAudio(void *parametro);
 void taskAlarma(void *parametro);
+void taskSonidoAlarma(void *parametro);
 #if ENABLE_CAMERA
 void taskCamaraIA(void *parametro);
 #endif
 void taskPantalla(void *parametro);
-void taskEnfoque(void *parametro);
 float medirDistanciaCm();
 void reproducirTono(float frecuenciaHz, int duracionMs, float volumen = 1.0f);
 void dibujarPantalla(const Lecturas &copia, PosturaEstado postura, const Umbrales &u);
@@ -375,20 +390,22 @@ void setup() {
     Serial.println("ERROR: no se pudo crear el mutex. Deteniendo.");
     while (true) { delay(1000); }
   }
-
-  xUmbralesMutex = xSemaphoreCreateMutex();
-  if (xUmbralesMutex == NULL) {
-    Serial.println("ERROR: no se pudo crear el mutex de umbrales. Deteniendo.");
+  xAudioMutex = xSemaphoreCreateMutex();
+  if (xAudioMutex == NULL) {
+    Serial.println("ERROR: no se pudo crear el mutex de audio. Deteniendo.");
     while (true) { delay(1000); }
   }
-  cargarUmbrales(); // trae lo guardado en NVS (o los valores de fabrica si es la primera vez)
-
   xEnfoqueMutex = xSemaphoreCreateMutex();
   if (xEnfoqueMutex == NULL) {
     Serial.println("ERROR: no se pudo crear el mutex de enfoque. Deteniendo.");
     while (true) { delay(1000); }
   }
-  cargarConfigEnfoque();
+  xUmbralesMutex = xSemaphoreCreateMutex();   // <-- esta línea es la que falta
+  if (xUmbralesMutex == NULL) {
+    Serial.println("ERROR: no se pudo crear el mutex de umbrales. Deteniendo.");
+    while (true) { delay(1000); }
+  }
+  cargarUmbrales(); // trae lo guardado en NVS (o los valores de fabrica si es la primera vez)
 
   iniciarSD(); // sonidos de alarma; si no hay SD, cae a los patrones generados
   iniciarBLE(); // servidor BLE con los ajustes (ver documento del protocolo)
@@ -398,15 +415,21 @@ void setup() {
 
   xTaskCreatePinnedToCore(taskSensores,  "TaskSensores",  3072, NULL, 2, NULL, 0);
   xTaskCreatePinnedToCore(taskAudio,     "TaskAudio",     3072, NULL, 3, NULL, 0);
-  xTaskCreatePinnedToCore(taskAlarma,    "TaskAlarma",    3072, NULL, 4, NULL, 0);
+  xTaskCreatePinnedToCore(taskAlarma,    "TaskAlarma",    8192, NULL, 4, NULL, 0);
+  xTaskCreatePinnedToCore(taskSonidoAlarma, "TaskSonido", 8192, NULL, 3, NULL, 0);
   xTaskCreatePinnedToCore(taskEnfoque,   "TaskEnfoque",   3072, NULL, 1, NULL, 0);
   #if ENABLE_CAMERA
     xTaskCreatePinnedToCore(taskCamaraIA, "TaskCamaraIA", 16384, NULL, 1, NULL, 1);
   #endif
-  xTaskCreatePinnedToCore(taskPantalla,  "TaskPantalla",  4096, NULL, 2, NULL, 1);
+  xTaskCreatePinnedToCore(taskPantalla,  "TaskPantalla",  8192, NULL, 2, NULL, 1);
 
   Serial.println("Tareas creadas. loop() queda inactivo.");
 }
+
+void loop() {
+  vTaskDelay(pdMS_TO_TICKS(1000));
+}
+
 
 void loop() {
   vTaskDelay(pdMS_TO_TICKS(1000));
