@@ -9,7 +9,7 @@ void iniciarPantalla() {
   tft.setRotation(1);
   tft.fillScreen(ST77XX_BLACK);
 }
-
+/*
 // Le entrega a TJpg_Decoder como pintar cada bloque decodificado del JPEG.
 bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t *bitmap) {
   if (y >= tft.height()) return 0; // ya no queda mas pantalla, se puede cortar
@@ -17,7 +17,34 @@ bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t *bitmap) 
   return true;
 }
 
+#define ARCHIVO_LOGO "/logo.jpg"
+
+// Muestra /logo.jpg desde la SD, centrado. Si no hay SD o no existe el
+// archivo, no hace nada (pantallaBienvenida sigue igual sin el logo).
+void mostrarLogo() {
+  if (!sdDisponible) return;
+  if (!SD_MMC.exists(ARCHIVO_LOGO)) return;
+
+  TJpgDec.setJpgScale(1);
+  TJpgDec.setSwapBytes(true);
+  TJpgDec.setCallback(tft_output);
+
+  uint16_t ancho = 0, alto = 0;
+  TJpgDec.getFsJpgSize(&ancho, &alto, ARCHIVO_LOGO, SD_MMC);
+
+  int x = (ancho > 0) ? (tft.width() - ancho) / 2 : 0;
+  int y = (alto  > 0) ? (tft.height() - alto) / 2  : 0;
+  if (x < 0) x = 0;
+  if (y < 0) y = 0;
+
+  tft.fillScreen(ST77XX_WHITE); // mismo tono de fondo que el logo original
+  TJpgDec.drawFsJpg(x, y, ARCHIVO_LOGO, SD_MMC);
+  delay(2000);
+} */
+
 void pantallaBienvenida() {
+  //mostrarLogo();
+
   tft.fillScreen(ST77XX_BLACK);
   tft.setTextColor(ST77XX_YELLOW);
   tft.setTextSize(2);
